@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "ONE ASSASIN",
+      "hasCanvas": true,
+      "bodyTextLen": 201,
+      "bodyTextHash": "235146a023f04ce766093392d2354b8a8c76ec0523936c3427b7cbed35825b52",
+      "bodyTextPrefix": "120 G 8 ◆ SETTINGS DARK FANTASY ROGUELIKE ONE ASSASIN ONE LIFE. ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "ONE ASSASIN",
+      "hasCanvas": true,
+      "bodyTextLen": 201,
+      "bodyTextHash": "235146a023f04ce766093392d2354b8a8c76ec0523936c3427b7cbed35825b52",
+      "bodyTextPrefix": "120 G 8 ◆ SETTINGS DARK FANTASY ROGUELIKE ONE ASSASIN ONE LIFE. ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
