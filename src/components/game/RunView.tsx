@@ -280,8 +280,17 @@ function TouchPad({ game, leftHanded }: { game: Game; leftHanded: boolean }) {
             e.stopPropagation();
             game.input.attackHeld = true;
             game.input.attackPressed = true;
+            e.currentTarget.setPointerCapture(e.pointerId);
           }}
-          onPointerUp={() => {
+          onPointerUp={(e) => {
+            e.preventDefault();
+            game.input.attackHeld = false;
+          }}
+          onPointerCancel={() => {
+            game.input.attackHeld = false;
+          }}
+          onPointerLeave={(e) => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) return;
             game.input.attackHeld = false;
           }}
           className="flex h-20 w-20 items-center justify-center rounded-full border border-blood/60 bg-blood text-sm font-cond font-bold uppercase tracking-wider text-bone"

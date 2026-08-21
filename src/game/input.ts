@@ -32,14 +32,14 @@ export class Input {
     };
     const blur = () => this.keys.clear();
     const md = (e: MouseEvent) => {
-      if (e.button === 0) {
+      if (e.button === 0 || e.button === 2) {
         this.pointer.down = true;
         this.attackHeld = true;
         this.attackPressed = true;
       }
     };
     const mu = (e: MouseEvent) => {
-      if (e.button === 0) {
+      if (e.button === 0 || e.button === 2) {
         this.pointer.down = false;
         this.attackHeld = false;
       }
@@ -49,10 +49,12 @@ export class Input {
       this.pointer.x = e.clientX - r.left;
       this.pointer.y = e.clientY - r.top;
     };
+    const contextmenu = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
     window.addEventListener("blur", blur);
     el.addEventListener("mousedown", md);
+    el.addEventListener("contextmenu", contextmenu);
     window.addEventListener("mouseup", mu);
     el.addEventListener("mousemove", mm);
     this.unbind = [
@@ -60,6 +62,7 @@ export class Input {
       () => window.removeEventListener("keyup", ku),
       () => window.removeEventListener("blur", blur),
       () => el.removeEventListener("mousedown", md),
+      () => el.removeEventListener("contextmenu", contextmenu),
       () => window.removeEventListener("mouseup", mu),
       () => el.removeEventListener("mousemove", mm),
     ];

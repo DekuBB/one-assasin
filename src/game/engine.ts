@@ -5,7 +5,6 @@ import type {
   EnemyKind,
   EquipSlot,
   EventDef,
-  HeroId,
   MetaSave,
   ProjectileKind,
   RoomType,
@@ -284,7 +283,7 @@ export class Game {
     let atkSpd = h.attackSpeed;
     let crit = h.crit + (leg.precision ?? 0) * 0.012;
     let critDmg = h.critDmg;
-    let range = h.range;
+    const range = h.range;
     let skillDmg = 1;
     let cdr = 0;
     let lifesteal = h.id === "vex" ? 0.03 : 0;
@@ -664,7 +663,6 @@ export class Game {
     this.dashCharges--;
     this.dashCd = this.statsCache.dashCd;
     this.invuln = 0.16;
-    this.stats; // dashes
     bumpMission(this.meta, "dash", 1);
     Sfx.dash();
     if (this.statsCache.phantom) {
@@ -718,7 +716,7 @@ export class Game {
       const dist = Math.hypot(dx, dy);
       if (dist > range + e.r) continue;
       const a = Math.atan2(dy, dx);
-      let da = Math.abs(wrap(a - ang));
+      const da = Math.abs(wrap(a - ang));
       if (da > arc * 0.5 && dist > 18) continue;
       let backstab = false;
       const toMe = Math.atan2(y - e.y, x - e.x);
