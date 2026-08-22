@@ -153,7 +153,7 @@ export function RunView({
       </div>
 
       {game.tutorial && game.tutorialStep > 0 && game.tutorialStep < 7 && overlay === "none" && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-36 px-6 text-center">
+        <div className="pointer-events-none absolute inset-x-0 bottom-48 px-6 text-center sm:bottom-36">
           <p className="rounded-md border border-line bg-ink/80 px-3 py-2 font-cond text-sm text-bone">{TIPS[game.tutorialStep]}</p>
           <button
             type="button"
