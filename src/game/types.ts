@@ -60,7 +60,8 @@ export type RunOverlay =
   | "pause"
   | "defeat"
   | "victory"
-  | "tutorial";
+  | "tutorial"
+  | "technique";
 
 export type EnemyKind =
   | "goblin"
@@ -71,9 +72,13 @@ export type EnemyKind =
   | "berserker"
   | "knight"
   | "gatekeeper"
-  | "widow";
+  | "widow"
+  | "wraith"
+  | "golem";
 
 export type ProjectileKind = "arrow" | "bolt" | "void" | "fire" | "blood" | "boss" | "player";
+
+export type ChallengeId = "none" | "daily" | "glass" | "speed";
 
 export interface Vec {
   x: number;
@@ -100,6 +105,7 @@ export interface HeroDef {
   unlockGems: number;
   skill1: SkillDef;
   skill2: SkillDef;
+  skill3: SkillDef;
   ult: SkillDef;
   passive: { name: string; desc: string };
 }
@@ -142,6 +148,18 @@ export interface BlessingDef {
   glass?: boolean;
   phantom?: boolean;
   bloodRage?: boolean;
+  poison?: number;
+  frost?: number;
+  execute?: number;
+  dashDmg?: number;
+  ricochet?: boolean;
+  magnet?: boolean;
+  secondWind?: boolean;
+  comboFinisher?: boolean;
+  parryWindow?: number;
+  bloodWell?: number;
+  hasteOnKill?: boolean;
+  shieldOnDash?: boolean;
 }
 
 export interface SynergyDef {
@@ -233,6 +251,7 @@ export interface Settings {
   lowFx: boolean;
   language: "en" | "pl";
   uiScale: number;
+  showTouch: boolean;
 }
 
 export interface MetaSave {
@@ -248,6 +267,7 @@ export interface MetaSave {
   equipped: Partial<Record<EquipSlot, string>>;
   legacy: Record<string, number>;
   discoveredBlessings: string[];
+  discoveredTechniques: string[];
   achievements: Record<string, { count: number; claimed: boolean }>;
   missions: Record<string, { count: number; claimed: boolean; day: string }>;
   bestScore: number;
@@ -272,4 +292,5 @@ export interface RunStats {
   score: number;
   rooms: number;
   noHitBoss: boolean;
+  parries: number;
 }

@@ -200,6 +200,16 @@ function drawEnemies(ctx: CanvasRenderingContext2D, game: Game) {
       ctx.fillStyle = "rgba(224,122,58,0.7)";
       ctx.fillRect(e.x - 3, e.y - 20, 6, 6);
     }
+    if (e.poison > 0) {
+      ctx.fillStyle = "rgba(61,186,122,0.75)";
+      ctx.fillRect(e.x + 4, e.y - 20, 6, 6);
+    }
+    if (e.chill > 0) {
+      ctx.fillStyle = "rgba(125,211,232,0.55)";
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 }
 

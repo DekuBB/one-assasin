@@ -25,6 +25,8 @@ export const useMeta = create<{
   claimLogin: () => void;
   applyRun: (gold: number, gems: number, kills: number, score: number, win: boolean) => void;
   grantItem: (defId: string) => void;
+  mergeItems: (a: string, b: string) => boolean;
+  sellItem: (uidStr: string) => boolean;
   setSettings: (p: Partial<Settings>) => void;
 }>((set, get) => ({
   save: defaultSave(),
@@ -143,15 +145,55 @@ export const useMeta = create<{
       s.runs += 1;
       if (win) s.victories += 1;
       s.bestScore = Math.max(s.bestScore, score);
+      const hid = s.selectedHero;
+      s.heroLevels[hid] = Math.min(50, (s.heroLevels[hid] ?? 1) + (win ? 2 : 1));
       const a = s.achievements.gold ?? { count: 0, claimed: false };
       a.count = s.gold;
       s.achievements.gold = a;
+      const k = s.achievements.kills ?? { count: 0, claimed: false };
+      k.count = s.kills;
+      s.achievements.kills = k;
     });
   },
   grantItem: (defId) => {
     get().patch((s) => {
       s.inventory.push({ uid: uid(), defId, level: 1 });
     });
+  },
+  mergeItems: (a, b) => {
+    if (a === b) return false;
+    const save = get().save;
+    const ia = save.inventory.find((i) => i.uid === a);
+    const ib = save.inventory.find((i) => i.uid === b);
+    if (!ia || !ib || ia.defId !== ib.defId) return false;
+    get().patch((s) => {
+      const keep = s.inventory.find((i) => i.uid === a);
+      if (!keep) return;
+      keep.level = Math.min(50, keep.level + ib.level + 1);
+      s.inventory = s.inventory.filter((i) => i.uid !== b);
+      for (const slot of Object.keys(s.equipped) as (keyof typeof s.equipped)[]) {
+        if (s.equipped[slot] === b) s.equipped[slot] = a;
+      }
+    });
+    return true;
+  },
+  sellItem: (uidStr) => {
+    const save = get().save;
+    const it = save.inventory.find((i) => i.uid === uidStr);
+    if (!it) return false;
+    if (Object.values(save.equipped).includes(uidStr) && save.inventory.filter((x) => EQUIP_BY_ID[x.defId]?.slot === EQUIP_BY_ID[it.defId]?.slot).length <= 1) {
+      return false;
+    }
+    const def = EQUIP_BY_ID[it.defId];
+    const gold = 20 + it.level * 15 + (def?.rarity === "legendary" ? 80 : 10);
+    get().patch((s) => {
+      s.gold += gold;
+      s.inventory = s.inventory.filter((i) => i.uid !== uidStr);
+      for (const slot of Object.keys(s.equipped) as (keyof typeof s.equipped)[]) {
+        if (s.equipped[slot] === uidStr) delete s.equipped[slot];
+      }
+    });
+    return true;
   },
   setSettings: (p) => {
     get().patch((s) => {

@@ -13,9 +13,11 @@ import {
   RARITY_LABEL,
   SYNERGIES,
 } from "@/game/data/catalog";
+import { TECHNIQUES } from "@/game/data/techniques";
 import { Sfx, setMusic, unlockAudio } from "@/game/audio";
+import { t } from "@/game/i18n";
 import { Back, Btn, Currency, Panel, Tag } from "./ui";
-import type { HeroId, Settings } from "@/game/types";
+import type { ChallengeId, HeroId, Settings } from "@/game/types";
 
 function HeroMark() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -72,14 +74,14 @@ export function MainMenu({ onPlay }: { onPlay: () => void }) {
 
       <div className="flex flex-col gap-2">
         {!save.claimedLogin && (
-          <Btn variant="gold" wide onClick={() => { unlockAudio(); Sfx.ui(); claimLogin(); }}>
-            Claim daily vow
+          <Btn variant="gold" wide className="min-h-12" onClick={() => { unlockAudio(); Sfx.ui(); claimLogin(); }}>
+            {t(save.settings.language, "daily")}
           </Btn>
         )}
         <Btn
           variant="primary"
           wide
-          className="py-3.5 text-[17px]"
+          className="py-3.5 text-[17px] min-h-12"
           onClick={() => {
             unlockAudio();
             Sfx.ui();
@@ -87,7 +89,7 @@ export function MainMenu({ onPlay }: { onPlay: () => void }) {
             onPlay();
           }}
         >
-          Descend
+          {t(save.settings.language, "descend")}
         </Btn>
         <div className="grid grid-cols-2 gap-2">
           <Btn onClick={() => { Sfx.click(); setScreen("heroes"); }}>Assassins</Btn>
@@ -102,10 +104,11 @@ export function MainMenu({ onPlay }: { onPlay: () => void }) {
   );
 }
 
-export function Hub({ onRun }: { onRun: () => void }) {
+export function Hub({ onRun }: { onRun: (challenge?: ChallengeId) => void }) {
   const save = useMeta((s) => s.save);
   const setScreen = useMeta((s) => s.setScreen);
   const hero = HEROES.find((h) => h.id === save.selectedHero)!;
+  const lang = save.settings.language;
 
   const spots: { title: string; sub: string; go: () => void }[] = [
     { title: "Campfire", sub: "Change assassin", go: () => setScreen("heroes") },
@@ -116,7 +119,7 @@ export function Hub({ onRun }: { onRun: () => void }) {
   ];
 
   return (
-    <div className="flex h-full flex-col px-5 pb-6 pt-5">
+    <div className="flex h-full min-h-0 flex-col px-5 pb-6 pt-5">
       <div className="flex items-center justify-between">
         <Back onClick={() => setScreen("menu")} label="Menu" />
         <Currency gold={save.gold} gems={save.gems} />
@@ -127,10 +130,23 @@ export function Hub({ onRun }: { onRun: () => void }) {
       <Panel className="mt-5 p-4">
         <p className="font-cond text-[11px] uppercase tracking-[0.2em] text-mute">Ready</p>
         <p className="mt-1 font-display text-lg text-bone">{hero.name}</p>
-        <p className="text-sm text-mute">{hero.role} · Lv {save.heroLevels[hero.id]} · {hero.title}</p>
-        <Btn variant="primary" wide className="mt-4 py-3" onClick={() => { unlockAudio(); Sfx.ui(); onRun(); }}>
-          Enter the dungeon
+        <p className="text-sm text-mute">
+          {hero.role} · Lv {save.heroLevels[hero.id]} · {hero.title}
+        </p>
+        <Btn variant="primary" wide className="mt-4 min-h-12 py-3" onClick={() => { unlockAudio(); Sfx.ui(); onRun("none"); }}>
+          {t(lang, "enter")}
         </Btn>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <Btn className="min-h-11 px-2 py-2 text-xs" onClick={() => { unlockAudio(); Sfx.ui(); onRun("daily"); }}>
+            Daily
+          </Btn>
+          <Btn className="min-h-11 px-2 py-2 text-xs" onClick={() => { unlockAudio(); Sfx.ui(); onRun("glass"); }}>
+            Glass
+          </Btn>
+          <Btn className="min-h-11 px-2 py-2 text-xs" onClick={() => { unlockAudio(); Sfx.ui(); onRun("speed"); }}>
+            Speed
+          </Btn>
+        </div>
       </Panel>
 
       <div className="mt-4 flex flex-1 flex-col gap-2 overflow-auto">
@@ -139,7 +155,7 @@ export function Hub({ onRun }: { onRun: () => void }) {
             type="button"
             key={s.title}
             onClick={() => { Sfx.click(); s.go(); }}
-            className="flex items-center justify-between rounded-lg border border-line bg-ink px-4 py-3 text-left hover:border-line-strong"
+            className="flex min-h-12 items-center justify-between rounded-lg border border-line bg-ink px-4 py-3 text-left hover:border-line-strong"
           >
             <span>
               <span className="block font-cond text-[15px] font-semibold text-bone">{s.title}</span>
@@ -183,7 +199,7 @@ export function HeroesScreen() {
               </div>
               <p className="mt-2 text-sm leading-relaxed text-mute">{h.blurb}</p>
               <p className="mt-2 font-cond text-xs text-faint">
-                HP {h.hp} · ATK {h.attack} · {h.skill1.name} / {h.skill2.name}
+                HP {h.hp} · ATK {h.attack} · {h.skill1.name} / {h.skill2.name} / {h.skill3.name}
               </p>
               {locked ? (
                 <Btn
@@ -221,9 +237,11 @@ export function EquipmentScreen() {
   const setScreen = useMeta((s) => s.setScreen);
   const equipItem = useMeta((s) => s.equipItem);
   const upgradeItem = useMeta((s) => s.upgradeItem);
+  const sellItem = useMeta((s) => s.sellItem);
+  const mergeItems = useMeta((s) => s.mergeItems);
 
   return (
-    <div className="flex h-full flex-col px-5 pb-6 pt-5">
+    <div className="flex h-full min-h-0 flex-col px-5 pb-6 pt-5">
       <div className="flex items-center justify-between">
         <Back onClick={() => setScreen("hub")} />
         <Currency gold={save.gold} gems={save.gems} />
@@ -235,6 +253,7 @@ export function EquipmentScreen() {
           if (!def) return null;
           const equipped = save.equipped[def.slot] === it.uid;
           const cost = it.level * 80 + 50;
+          const twin = save.inventory.find((o) => o.uid !== it.uid && o.defId === it.defId);
           return (
             <Panel key={it.uid} className={"p-3 " + (equipped ? "border-gold/40" : "")}>
               <div className="flex items-start justify-between">
@@ -251,18 +270,28 @@ export function EquipmentScreen() {
                 {def.hp ? `HP ${Math.round((def.hp ?? 0) * (1 + (it.level - 1) * 0.15))} ` : ""}
                 {def.perk ?? ""}
               </p>
-              <div className="mt-2 flex gap-2">
-                <Btn className="flex-1 py-2 text-sm" variant={equipped ? "primary" : "ghost"} onClick={() => equipItem(it.uid)}>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Btn className="min-h-11 flex-1 py-2 text-sm" variant={equipped ? "primary" : "ghost"} onClick={() => equipItem(it.uid)}>
                   {equipped ? "Worn" : "Equip"}
                 </Btn>
-                <Btn className="flex-1 py-2 text-sm" onClick={() => upgradeItem(it.uid)}>
+                <Btn className="min-h-11 flex-1 py-2 text-sm" onClick={() => upgradeItem(it.uid)}>
                   Temper {cost} G
                 </Btn>
+                {twin && (
+                  <Btn className="min-h-11 py-2 text-sm" variant="gold" onClick={() => mergeItems(it.uid, twin.uid)}>
+                    Merge
+                  </Btn>
+                )}
+                {!equipped && (
+                  <Btn className="min-h-11 py-2 text-sm" variant="danger" onClick={() => sellItem(it.uid)}>
+                    Sell
+                  </Btn>
+                )}
               </div>
             </Panel>
           );
         })}
-        <p className="pb-4 pt-2 text-center text-xs text-faint">Find new steel in treasure rooms and boss chests.</p>
+        <p className="pb-4 pt-2 text-center text-xs text-faint">Find new steel in treasure rooms and boss chests. Merge twins to raise level.</p>
       </div>
     </div>
   );
@@ -397,6 +426,19 @@ export function CodexScreen() {
             <p className="text-xs text-mute">{s.desc}</p>
           </Panel>
         ))}
+        <h3 className="font-display pt-2 text-lg">Techniques</h3>
+        {TECHNIQUES.map((tech) => {
+          const known = save.discoveredTechniques?.includes(tech.id);
+          return (
+            <Panel key={tech.id} className="p-3">
+              <div className="flex items-center justify-between">
+                <p className="font-cond font-semibold text-bone">{known ? tech.name : "????"}</p>
+                <Tag color={tech.color}>{tech.rarity}</Tag>
+              </div>
+              <p className="text-xs text-mute">{known ? tech.desc : "Not yet chosen on a descent."}</p>
+            </Panel>
+          );
+        })}
       </div>
     </div>
   );
@@ -450,6 +492,7 @@ export function SettingsScreen() {
         <Slider label="Master" value={s.master} onChange={(v) => setSettings({ master: v })} />
         <Slider label="Music" value={s.music} onChange={(v) => setSettings({ music: v })} />
         <Slider label="Effects" value={s.sfx} onChange={(v) => setSettings({ sfx: v })} />
+        <Slider label="UI scale" value={s.uiScale} onChange={(v) => setSettings({ uiScale: Math.max(0.85, Math.min(1.15, v * 0.3 + 0.85)) })} />
         <Toggle label="Screen shake" on={s.shake} onClick={() => toggle("shake")} />
         <Toggle label="Damage numbers" on={s.numbers} onClick={() => toggle("numbers")} />
         <Toggle label="Haptics" on={s.haptics} onClick={() => toggle("haptics")} />
@@ -457,6 +500,7 @@ export function SettingsScreen() {
         <Toggle label="Auto aim" on={s.autoAim} onClick={() => toggle("autoAim")} />
         <Toggle label="Low effects" on={s.lowFx} onClick={() => toggle("lowFx")} />
         <Toggle label="Left-handed" on={s.leftHanded} onClick={() => toggle("leftHanded")} />
+        <Toggle label="Always show touch controls" on={s.showTouch} onClick={() => toggle("showTouch")} />
         <div className="flex gap-2">
           <Btn className="flex-1" variant={s.language === "en" ? "primary" : "ghost"} onClick={() => setSettings({ language: "en" })}>
             English

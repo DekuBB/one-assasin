@@ -177,6 +177,8 @@ export function getAtlas(): Atlas {
       knight: blob("#701828", pal.steel, true),
       gatekeeper: blob("#4a3a78", pal.cyan, true),
       widow: blob("#8a3a18", pal.gold, true),
+      wraith: blob("#5ad4e0", pal.cyan, false, true),
+      golem: blob("#6a7388", pal.gold, true),
     },
     tiles: {
       floor: tile("#1a1c24", "#12141a"),

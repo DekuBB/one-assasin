@@ -1,6 +1,7 @@
 import type {
   BiomeId,
   BlessingDef,
+  ChallengeId,
   DungeonNode,
   EnemyKind,
   EquipSlot,
@@ -23,6 +24,7 @@ import {
   EVENTS,
   SYNERGIES,
 } from "./data/catalog";
+import { TECHNIQUES, TECHNIQUE_BY_ID, type TechniqueDef } from "./data/techniques";
 import { COLS, generateGraph, generateRoom, Rng, ROWS, TILE, worldOf, type Cell, type RoomMap } from "./dungeon";
 import { Input } from "./input";
 import { Sfx } from "./audio";
@@ -91,6 +93,7 @@ export interface Enemy {
   burn: number;
   chill: number;
   marks: number;
+  poison: number;
   alive: boolean;
   elite: boolean;
 }
@@ -144,6 +147,18 @@ export interface Stats {
   phantom: boolean;
   bloodRage: boolean;
   glass: boolean;
+  poison: number;
+  frost: number;
+  execute: number;
+  dashDmg: number;
+  ricochet: boolean;
+  magnet: boolean;
+  secondWind: boolean;
+  comboFinisher: boolean;
+  parryBonus: number;
+  bloodWell: number;
+  hasteOnKill: boolean;
+  shieldOnDash: boolean;
 }
 
 export class Game {
@@ -194,6 +209,21 @@ export class Game {
   stillBlood = false;
   usedStill = false;
   usedCheatDeath = false;
+  usedSecond = false;
+  shield = 0;
+  sk3 = 0;
+  parrying = 0;
+  parryCd = 0;
+  technique: TechniqueDef | null = null;
+  techniqueChoices: TechniqueDef[] = [];
+  challenge: ChallengeId = "none";
+  nextKillBoom = 0;
+  markedCrits = 0;
+  twinToggle = false;
+  flameShield = 0;
+  pending: { t: number; fn: () => void }[] = [];
+  buffs: { id: string; t: number; atkSpd?: number; move?: number; fragile?: number }[] = [];
+
 
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
@@ -241,11 +271,18 @@ export class Game {
     this.autoAim = meta.settings.autoAim;
   }
 
-  startRun(opts?: { tutorial?: boolean; challenge?: string }) {
+  startRun(opts?: { tutorial?: boolean; challenge?: ChallengeId }) {
     this.rng = new Rng((Math.random() * 1e9) | 0);
     this.hero = HERO_BY_ID[this.meta.selectedHero] ?? HERO_BY_ID.zero;
     this.act = 1;
     this.biome = "citadel";
+    this.challenge = opts?.challenge ?? "none";
+    if (this.challenge === "daily") {
+      const day = new Date().toISOString().slice(0, 10);
+      let h = 0;
+      for (let i = 0; i < day.length; i++) h = (h * 33 + day.charCodeAt(i)) | 0;
+      this.rng = new Rng(h >>> 0);
+    }
     this.blessings = [];
     this.synergies = [];
     this.curses = [];
@@ -255,19 +292,27 @@ export class Game {
     this.energy = 0;
     this.combo = 0;
     this.stats = emptyStats();
-    this.tutorial = !!opts?.tutorial || !this.meta.tutorialDone;
+    this.tutorial = !!opts?.tutorial || (!this.meta.tutorialDone && this.challenge === "none");
     this.tutorialStep = this.tutorial ? 1 : 0;
-    this.graph = generateGraph(this.rng, this.tutorial ? 5 : 8);
+    this.graph = generateGraph(this.rng, this.tutorial ? 5 : this.challenge === "speed" ? 5 : 8);
     this.floor = 0;
     this.node = 0;
+    this.technique = null;
+    this.pending = [];
+    this.buffs = [];
+    this.shield = 0;
+    this.usedSecond = false;
+    this.usedCheatDeath = false;
+    this.usedStill = false;
+    this.markedCrits = 0;
+    this.nextKillBoom = 0;
     this.recompute();
     this.hp = this.maxHp;
     this.dashCharges = this.statsCache.dashCharges;
     this.dashMax = this.statsCache.dashCharges;
-    this.usedCheatDeath = false;
-    this.usedStill = false;
     this.enterNode();
-    this.overlay = "none";
+    this.rollTechniques();
+    this.overlay = this.tutorial ? "none" : "technique";
     if (this.tutorial) this.tutorialStep = 1;
   }
 
@@ -299,6 +344,18 @@ export class Game {
     let phantom = false;
     let bloodRage = false;
     let glass = false;
+    let poison = 0;
+    let frost = 0;
+    let execute = 0;
+    let dashDmg = 0;
+    let ricochet = false;
+    let magnet = false;
+    let secondWind = false;
+    let comboFinisher = false;
+    let parryBonus = 0;
+    let bloodWell = 0;
+    let hasteOnKill = false;
+    let shieldOnDash = false;
 
     for (const slot of Object.keys(this.meta.equipped) as EquipSlot[]) {
       const uid = this.meta.equipped[slot];
@@ -322,6 +379,11 @@ export class Game {
       if (d.id === "arm_void") {
         /* phase handled in hurt */
       }
+      if (d.id === "wep_frostbite") frost += 0.8;
+      if (d.id === "glove_parry") parryBonus += 0.08;
+      if (d.id === "boot_hunter") hasteOnKill = true;
+      if (d.id === "ring_storm") lightning = true;
+      if (d.id === "relic_aegis") shieldOnDash = true;
     }
     this.stillBlood = false;
     for (const b of this.blessings) {
@@ -350,6 +412,18 @@ export class Game {
       if (b.bloodRage) bloodRage = true;
       if (b.glass) glass = true;
       if (b.id === "still_blood") this.stillBlood = true;
+      poison += b.poison ?? 0;
+      frost += b.frost ?? 0;
+      execute += b.execute ?? 0;
+      dashDmg += b.dashDmg ?? 0;
+      if (b.ricochet) ricochet = true;
+      if (b.magnet) magnet = true;
+      if (b.secondWind) secondWind = true;
+      if (b.comboFinisher) comboFinisher = true;
+      parryBonus += b.parryWindow ?? 0;
+      bloodWell += b.bloodWell ?? 0;
+      if (b.hasteOnKill) hasteOnKill = true;
+      if (b.shieldOnDash) shieldOnDash = true;
     }
     for (const c of this.curses) {
       const cur = CURSES[c];
@@ -384,7 +458,30 @@ export class Game {
       phantom,
       bloodRage,
       glass,
+      poison,
+      frost,
+      execute,
+      dashDmg,
+      ricochet,
+      magnet,
+      secondWind,
+      comboFinisher,
+      parryBonus,
+      bloodWell,
+      hasteOnKill,
+      shieldOnDash,
     };
+    if (this.challenge === "glass") {
+      this.maxHp = Math.max(20, this.maxHp * 0.55);
+      this.hp = Math.min(this.hp, this.maxHp);
+      this.statsCache.maxHp = this.maxHp;
+      this.statsCache.attack *= 1.25;
+      this.statsCache.glass = true;
+    }
+    if (this.challenge === "speed") {
+      this.statsCache.move *= 1.12;
+      this.statsCache.atkSpd *= 1.08;
+    }
   }
 
   enterNode() {
@@ -419,11 +516,12 @@ export class Game {
     const hpScale = 1 + (this.floor + (this.act - 1) * 8) * 0.18;
     const atkScale = 1 + (this.floor + (this.act - 1) * 8) * 0.12;
     if (node.type === "combat" || node.type === "trap") {
-      const kinds: EnemyKind[] = this.act === 1 ? ["goblin", "skeleton", "bat"] : ["cultist", "spider", "bat"];
+      const kinds: EnemyKind[] = this.act === 1 ? ["goblin", "skeleton", "bat"] : ["cultist", "spider", "bat", "wraith"];
       const n = this.tutorial && this.floor === 0 ? 3 : node.enemyCount;
       for (let i = 0; i < n; i++) this.spawnEnemy(this.rng.pick(kinds), hpScale, atkScale);
     } else if (node.type === "elite") {
       this.spawnEnemy(this.floor >= 5 || this.act > 1 ? "berserker" : "knight", hpScale * 1.1, atkScale);
+      if (this.floor >= 4) this.spawnEnemy("golem", hpScale * 0.85, atkScale);
       if (this.floor >= 5) this.spawnEnemy("cultist", hpScale, atkScale);
     } else if (node.type === "boss") {
       this.spawnEnemy(this.act === 1 ? "gatekeeper" : "widow", hpScale, atkScale);
@@ -482,6 +580,7 @@ export class Game {
       burn: 0,
       chill: 0,
       marks: 0,
+      poison: 0,
       alive: true,
       elite: !!def.isElite || !!def.isBoss,
     });
@@ -492,9 +591,11 @@ export class Game {
       this.input.endFrame();
       return;
     }
-    if (this.overlay === "blessing" || this.overlay === "event" || this.overlay === "shop" || this.overlay === "chest" || this.overlay === "map" || this.overlay === "tutorial") {
+    if (this.overlay === "blessing" || this.overlay === "event" || this.overlay === "shop" || this.overlay === "chest" || this.overlay === "map" || this.overlay === "tutorial" || this.overlay === "technique") {
       this.time += dt;
       this.tickFx(dt);
+      this.tickPending(dt);
+      if (this.input.pickIndex >= 0) this.tryPickOverlay(this.input.pickIndex);
       this.input.endFrame();
       return;
     }
@@ -508,6 +609,10 @@ export class Game {
     this.time += dt;
     this.roomTime += dt;
     this.stats.time += dt;
+    this.input.pollGamepad();
+    this.input.tick(dt);
+    this.tickPending(dt);
+    this.tickBuffs(dt);
 
     const st = this.statsCache;
     const axis = this.input.axis();
@@ -519,10 +624,19 @@ export class Game {
       this.pvy = Math.sin(this.dashAng) * sp;
       this.invuln = Math.max(this.invuln, this.dashing);
       if (this.lowFx === false) this.burst(this.px, this.py, st.glass ? "#ece6dc" : "#2ec4d6", 3);
+      if (st.dashDmg > 0) {
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          if (Math.hypot(e.x - this.px, e.y - this.py) < e.r + 16) {
+            this.hurtEnemy(e, st.attack * st.dashDmg * dt * 8, { skill: true });
+          }
+        }
+      }
     } else {
       let spd = st.move;
       if (st.bloodRage) spd *= 1 + (1 - this.hp / this.maxHp) * 0.35;
       if (this.hero.id === "kael" && this.combo >= 8) spd *= 1.25;
+      for (const b of this.buffs) if (b.move) spd *= 1 + b.move;
       this.pvx = axis.x * spd;
       this.pvy = axis.y * spd;
     }
@@ -535,7 +649,14 @@ export class Game {
     const nearest = this.nearestEnemy(280);
     let aimX = Math.cos(this.aim);
     let aimY = Math.sin(this.aim);
-    if (this.autoAim && nearest) {
+    if (this.input.padAim.x || this.input.padAim.y) {
+      aimX = this.input.padAim.x;
+      aimY = this.input.padAim.y;
+      const len = Math.hypot(aimX, aimY) || 1;
+      aimX /= len;
+      aimY /= len;
+      this.aim = Math.atan2(aimY, aimX);
+    } else if (this.autoAim && nearest) {
       aimX = nearest.x - this.px;
       aimY = nearest.y - this.py;
       const len = Math.hypot(aimX, aimY) || 1;
@@ -551,23 +672,46 @@ export class Game {
     this.atkCd = Math.max(0, this.atkCd - dt);
     this.sk1 = Math.max(0, this.sk1 - dt);
     this.sk2 = Math.max(0, this.sk2 - dt);
+    this.sk3 = Math.max(0, this.sk3 - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.flash = Math.max(0, this.flash - dt * 3);
     this.comboT = Math.max(0, this.comboT - dt);
     if (this.comboT <= 0) this.combo = 0;
     this.dashCd = Math.max(0, this.dashCd - dt);
+    this.parryCd = Math.max(0, this.parryCd - dt);
+    this.parrying = Math.max(0, this.parrying - dt);
+    this.flameShield = Math.max(0, this.flameShield - dt);
     if (this.dashCd <= 0 && this.dashCharges < this.dashMax) {
       this.dashCharges++;
       this.dashCd = st.dashCd;
     }
 
+    if (st.bloodWell > 0 && combatRoom(this.roomType) && !this.roomCleared) {
+      this.hp = Math.min(this.maxHp, this.hp + st.bloodWell * dt);
+    }
+
     if (this.input.wantDash() && this.dashing <= 0 && this.dashCharges > 0) {
       this.doDash(axis.x, axis.y);
+      this.input.consumeDash();
     }
     if (this.input.wantAttack() && this.atkCd <= 0) this.doAttack(aimX, aimY);
-    if (this.input.skill1Pressed && this.sk1 <= 0) this.doSkill(1, nearest);
-    if (this.input.skill2Pressed && this.sk2 <= 0) this.doSkill(2, nearest);
+    if (this.input.wantSkill1() && this.sk1 <= 0) {
+      this.doSkill(1, nearest);
+      this.input.consumeSkill(1);
+    }
+    if (this.input.wantSkill2() && this.sk2 <= 0) {
+      this.doSkill(2, nearest);
+      this.input.consumeSkill(2);
+    }
+    if (this.input.wantSkill3() && this.sk3 <= 0) {
+      this.doSkill(3, nearest);
+      this.input.consumeSkill(3);
+    }
     if (this.input.ultPressed && this.energy >= 100) this.doUlt(nearest);
+    if (this.input.wantParry() && this.parryCd <= 0 && this.parrying <= 0) {
+      this.doParry();
+      this.input.consumeParry();
+    }
     if (this.input.pausePressed) this.overlay = "pause";
 
     if (st.supernova > 0 && (axis.x || axis.y) && this.rng.chance(st.supernova * dt * 1.8)) {
@@ -665,11 +809,16 @@ export class Game {
     this.invuln = 0.16;
     bumpMission(this.meta, "dash", 1);
     Sfx.dash();
+    this.buzz(12);
     if (this.statsCache.phantom) {
       this.clones.push({ x: this.px, y: this.py, t: 1.6, ang: this.aim });
     }
     if (this.hero.id === "zero") {
       this.clones.push({ x: this.px, y: this.py, t: 0.4, ang: this.aim });
+    }
+    if (this.statsCache.shieldOnDash) this.shield = Math.min(this.maxHp * 0.4, this.shield + 12);
+    if (this.blessings.some((b) => b.id === "hollow_step")) {
+      this.buffs.push({ id: "hollow", t: 1, move: 0.2 });
     }
     this.tutorialAdvance(3);
   }
@@ -679,6 +828,7 @@ export class Game {
     let spd = st.atkSpd;
     if (st.bloodRage) spd *= 1 + (1 - this.hp / this.maxHp) * 0.8;
     if (this.hero.id === "kael" && this.combo >= 8) spd *= 1.25;
+    for (const b of this.buffs) if (b.atkSpd) spd *= 1 + b.atkSpd;
     this.atkCd = 1 / Math.max(0.4, spd);
     const ang = Math.atan2(ay, ax);
     this.aim = ang;
@@ -686,25 +836,36 @@ export class Game {
     Sfx.slash();
     this.tutorialAdvance(2);
 
+    const double = this.blessings.some((b) => b.id === "twin_fang") && (this.twinToggle = !this.twinToggle);
+    const shiv = this.blessings.some((b) => b.id === "saint_of_knives");
+
     if (this.hero.id === "lyra" || this.hero.id === "vex" || this.hero.id === "nyx") {
       const speed = this.hero.id === "lyra" ? 380 : 300;
-      this.projectiles.push({
-        id: id(),
-        x: this.px + ax * 14,
-        y: this.py + ay * 14,
-        vx: ax * speed,
-        vy: ay * speed,
-        dmg: st.attack,
-        r: 5,
-        life: 0.9,
-        friendly: true,
-        kind: "player",
-        color: this.hero.accent,
-        pierce: this.hero.id === "lyra" ? 1 : 0,
-      });
+      this.shoot(ax, ay, st.attack, speed, this.hero.id === "lyra" ? 1 : 0);
+      if (double) this.later(0.08, () => this.shoot(ax, ay, st.attack * 0.7, speed, 0));
+      if (shiv) this.shoot(ax, ay, st.attack * 0.25, speed * 0.85, 0);
       return;
     }
     this.meleeHit(this.px, this.py, ang, st.range, Math.PI * 0.55, st.attack, false);
+    if (double) this.later(0.07, () => this.meleeHit(this.px, this.py, ang, st.range, Math.PI * 0.55, st.attack * 0.7, false));
+    if (shiv) this.shoot(ax, ay, st.attack * 0.25, 340, 0);
+  }
+
+  shoot(ax: number, ay: number, dmg: number, speed: number, pierce: number) {
+    this.projectiles.push({
+      id: id(),
+      x: this.px + ax * 14,
+      y: this.py + ay * 14,
+      vx: ax * speed,
+      vy: ay * speed,
+      dmg,
+      r: 5,
+      life: 0.9,
+      friendly: true,
+      kind: "player",
+      color: this.hero.accent,
+      pierce: this.statsCache.ricochet ? pierce + 1 : pierce,
+    });
   }
 
   meleeHit(x: number, y: number, ang: number, range: number, arc: number, dmg: number, skill: boolean) {
@@ -725,21 +886,36 @@ export class Game {
     }
   }
 
-  doSkill(which: 1 | 2, target: Enemy | null) {
+  doSkill(which: 1 | 2 | 3, target: Enemy | null) {
     const st = this.statsCache;
     const cdMul = 1 - st.cdr;
-    if (which === 1) this.sk1 = this.hero.skill1.cooldown * cdMul;
-    else this.sk2 = this.hero.skill2.cooldown * cdMul;
+    let sid = "";
+    let dmgMul = 1.5;
+    if (which === 1) {
+      this.sk1 = this.hero.skill1.cooldown * cdMul;
+      sid = this.hero.skill1.id;
+      dmgMul = 1.5;
+    } else if (which === 2) {
+      this.sk2 = this.hero.skill2.cooldown * cdMul;
+      sid = this.hero.skill2.id;
+      dmgMul = 1.7;
+    } else {
+      const tech = this.technique;
+      const def = tech ?? this.hero.skill3;
+      this.sk3 = def.cooldown * cdMul;
+      sid = def.id;
+      dmgMul = 1.8;
+      bumpMission(this.meta, "tech", 1);
+    }
     Sfx.skill();
     this.tutorialAdvance(4);
-    const idn = which === 1 ? this.hero.skill1.id : this.hero.skill2.id;
-    const dmg = st.attack * st.skillDmg * (which === 1 ? 1.5 : 1.7);
-    this.cast(idn, dmg, target);
+    const dmg = st.attack * st.skillDmg * dmgMul;
+    this.cast(sid, dmg, target);
     if (st.voidEcho > 0) {
-      window.setTimeout(() => {
+      this.later(0.28, () => {
         if (this.overlay === "defeat") return;
-        this.cast(idn, dmg * st.voidEcho, this.nearestEnemy(300));
-      }, 280);
+        this.cast(sid, dmg * st.voidEcho, this.nearestEnemy(300));
+      });
     }
   }
 
@@ -808,19 +984,20 @@ export class Game {
         this.float(this.px, this.py - 24, "BLOOD RUSH", "#e11d48", true);
         this.atkCd = 0;
         this.invuln = 0.15;
+        this.buffs.push({ id: "blood_rush", t: 5, atkSpd: 0.8, move: 0.12 });
         break;
       }
       case "soul_burst": {
         this.float(this.px, this.py - 20, "ARMED", "#e11d48", false);
-        (this as unknown as { nextKillBoom: number }).nextKillBoom = dmg * 1.2;
+        this.nextKillBoom = dmg * 1.2;
         break;
       }
       case "flurry": {
         for (let i = 0; i < 4; i++) {
-          window.setTimeout(() => {
+          this.later(i * 0.07, () => {
             this.meleeHit(this.px, this.py, this.aim + (i - 1.5) * 0.2, st.range + 10, Math.PI * 0.7, dmg * 0.45, true);
             this.slashes.push({ x: this.px, y: this.py, ang: this.aim, life: 0.1, color: "#e0b07a" });
-          }, i * 70);
+          });
         }
         break;
       }
@@ -866,6 +1043,230 @@ export class Game {
         }
         break;
       }
+      case "afterimage":
+        this.clones.push({ x: this.px, y: this.py, t: 3, ang: this.aim });
+        break;
+      case "trap_shot": {
+        const x = this.px + Math.cos(this.aim) * 70;
+        const y = this.py + Math.sin(this.aim) * 70;
+        this.hazards.push({ x, y, r: 28, t: 4, dmg: dmg * 0.4 });
+        break;
+      }
+      case "blood_armor": {
+        const pay = this.hp * 0.18;
+        this.hp = Math.max(1, this.hp - pay);
+        this.shield += pay * 2.5;
+        this.float(this.px, this.py - 20, "BLOOD ARMOR", "#e11d48", true);
+        break;
+      }
+      case "sweep": {
+        this.meleeHit(this.px, this.py, this.aim, 64, Math.PI * 2, dmg * 0.85, true);
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          if (Math.hypot(e.x - this.px, e.y - this.py) < 70) {
+            e.chill = Math.max(e.chill, 1.1);
+            const a = Math.atan2(e.y - this.py, e.x - this.px);
+            e.x += Math.cos(a) * 28;
+            e.y += Math.sin(a) * 28;
+          }
+        }
+        break;
+      }
+      case "blink": {
+        const ox = this.px;
+        const oy = this.py;
+        this.px += Math.cos(this.aim) * 90;
+        this.py += Math.sin(this.aim) * 90;
+        this.invuln = 0.25;
+        this.hazards.push({ x: ox, y: oy, r: 26, t: 0.6, dmg: dmg * 0.5 });
+        this.burst(this.px, this.py, "#7dd3e8", 14);
+        break;
+      }
+      case "flame_shield":
+        this.flameShield = 4;
+        this.shield += this.maxHp * 0.18;
+        this.float(this.px, this.py - 20, "FLAME SHIELD", "#e07a3a", true);
+        break;
+      case "fan_knives":
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          this.projectiles.push({
+            id: id(),
+            x: this.px,
+            y: this.py,
+            vx: Math.cos(a) * 320,
+            vy: Math.sin(a) * 320,
+            dmg: dmg * 0.45,
+            r: 4,
+            life: 0.7,
+            friendly: true,
+            kind: "player",
+            color: "#c8d0d8",
+            pierce: 1,
+          });
+        }
+        break;
+      case "smoke_veil":
+        this.invuln = 1.6;
+        this.markedCrits = Math.max(this.markedCrits, 1);
+        this.float(this.px, this.py - 20, "VANISH", "#8c877e", true);
+        break;
+      case "chain_hook": {
+        const t = target ?? this.nearestEnemy(260);
+        if (t) {
+          t.x = this.px + Math.cos(this.aim) * 28;
+          t.y = this.py + Math.sin(this.aim) * 28;
+          this.hurtEnemy(t, dmg, { skill: true });
+        }
+        break;
+      }
+      case "frost_nova":
+        this.nova(this.px, this.py, 90, dmg * 0.6, "#7dd3e8");
+        for (const e of this.enemies) if (e.alive) e.chill = Math.max(e.chill, 2.4);
+        break;
+      case "poison_cloud":
+        this.hazards.push({ x: this.px, y: this.py, r: 46, t: 3.2, dmg: dmg * 0.2 });
+        for (const e of this.enemies) {
+          if (e.alive && Math.hypot(e.x - this.px, e.y - this.py) < 70) e.poison = Math.max(e.poison, 3);
+        }
+        break;
+      case "blade_storm":
+        this.orbs.push({ ang: 0, t: 2.5 }, { ang: 2.1, t: 2.5 }, { ang: 4.2, t: 2.5 });
+        this.buffs.push({ id: "storm", t: 2.5, atkSpd: 0.2 });
+        break;
+      case "ground_break":
+        this.nova(this.px, this.py, 80, dmg, "#d4552a");
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          const d = Math.hypot(e.x - this.px, e.y - this.py) || 1;
+          if (d < 90) {
+            e.x += ((e.x - this.px) / d) * 36;
+            e.y += ((e.y - this.py) / d) * 36;
+            e.chill = Math.max(e.chill, 0.5);
+          }
+        }
+        break;
+      case "rift_cut": {
+        const dx = Math.cos(this.aim);
+        const dy = Math.sin(this.aim);
+        this.meleeHit(this.px, this.py, this.aim, 110, 0.5, dmg, true);
+        this.px += dx * 86;
+        this.py += dy * 86;
+        this.invuln = 0.2;
+        this.dashing = 0.08;
+        this.dashAng = this.aim;
+        break;
+      }
+      case "mark_prey":
+        this.markedCrits = 3;
+        this.float(this.px, this.py - 20, "MARKED", "#e11d48", true);
+        break;
+      case "siphon_ward":
+        this.buffs.push({ id: "siphon", t: 3 });
+        for (let i = 0; i < 6; i++) {
+          this.later(i * 0.5, () => {
+            this.nova(this.px, this.py, 70, dmg * 0.18, "#a33d55");
+            this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.03);
+          });
+        }
+        break;
+      case "meteor_sigil": {
+        const t = target ?? this.nearestEnemy(240);
+        const x = t ? t.x : this.px + Math.cos(this.aim) * 80;
+        const y = t ? t.y : this.py + Math.sin(this.aim) * 80;
+        this.float(x, y - 20, "!", "#e07a3a", true);
+        this.later(0.55, () => this.nova(x, y, 70, dmg * 1.4, "#e07a3a"));
+        break;
+      }
+      case "caltrops":
+        for (let i = 0; i < 4; i++) {
+          const a = this.aim + (i - 1.5) * 0.5 + Math.PI;
+          this.hazards.push({
+            x: this.px + Math.cos(a) * 24,
+            y: this.py + Math.sin(a) * 24,
+            r: 16,
+            t: 3.5,
+            dmg: dmg * 0.22,
+          });
+        }
+        break;
+      case "ice_prison": {
+        const t = this.enemies.find((e) => e.alive && e.elite) ?? target ?? this.nearestEnemy(220);
+        if (t) {
+          t.chill = 2.2;
+          t.telegraph = 0;
+          this.hurtEnemy(t, dmg * 0.6, { skill: true });
+        }
+        break;
+      }
+      case "thunderclap":
+        for (const e of this.enemies) {
+          if (e.alive) this.hurtEnemy(e, dmg * 0.7, { skill: true });
+        }
+        this.burst(this.px, this.py, "#f0e070", 24);
+        break;
+      case "healing_pulse":
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.22);
+        this.float(this.px, this.py - 20, "PULSE", "#3dba7a", true);
+        break;
+      case "berserk_oath":
+        this.buffs.push({ id: "berserk", t: 4, atkSpd: 0.6, move: 0.3, fragile: 0.15 });
+        this.atkCd = 0;
+        this.float(this.px, this.py - 20, "BERSERK", "#e11d48", true);
+        break;
+      case "death_mark": {
+        const t = target ?? this.nearestEnemy(240);
+        if (t) {
+          this.later(1.4, () => {
+            if (t.alive) this.hurtEnemy(t, dmg * 1.55, { skill: true, crit: true });
+          });
+          this.float(t.x, t.y - 18, "MARK", "#a78bfa", true);
+        }
+        break;
+      }
+      case "shield_pulse":
+        this.shield += this.maxHp * 0.3;
+        this.float(this.px, this.py - 20, "AEGIS", "#2ec4d6", true);
+        break;
+      case "gravity_well": {
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          e.x += (this.px - e.x) * 0.65;
+          e.y += (this.py - e.y) * 0.65;
+        }
+        this.later(0.18, () => this.nova(this.px, this.py, 80, dmg, "#a78bfa"));
+        break;
+      }
+      case "mirror_image":
+        this.clones.push({ x: this.px - 16, y: this.py, t: 5, ang: this.aim });
+        this.clones.push({ x: this.px + 16, y: this.py, t: 5, ang: this.aim });
+        break;
+      case "execute_cut": {
+        const t = target ?? this.nearestEnemy(80);
+        if (t) {
+          if (!ENEMIES[t.kind].isBoss && t.hp / t.maxHp < 0.18) this.hurtEnemy(t, t.hp + 1, { skill: true, crit: true });
+          else this.hurtEnemy(t, dmg * 1.4, { skill: true });
+        }
+        break;
+      }
+      case "blood_nova":
+        this.hp = Math.max(1, this.hp - this.maxHp * 0.12);
+        this.nova(this.px, this.py, 100, dmg * 1.45, "#e11d48");
+        break;
+      case "haste_sigil":
+        this.buffs.push({ id: "haste", t: 3, move: 0.4, atkSpd: 0.15 });
+        this.dashCharges = this.dashMax;
+        this.dashCd = 0;
+        this.float(this.px, this.py - 20, "HASTE", "#c9a227", true);
+        break;
+      case "shadow_burst": {
+        this.clones.push({ x: this.px, y: this.py, t: 1.2, ang: this.aim });
+        this.px += Math.cos(this.aim) * 70;
+        this.py += Math.sin(this.aim) * 70;
+        this.invuln = 0.22;
+        this.later(0.12, () => this.nova(this.px - Math.cos(this.aim) * 70, this.py - Math.sin(this.aim) * 70, 50, dmg, "#22d3ee"));
+        break;
+      }
       default:
         this.nova(this.px, this.py, 60, dmg, this.hero.accent);
     }
@@ -884,7 +1285,7 @@ export class Game {
         break;
       case "eclipse":
         for (let i = 0; i < 18; i++) {
-          window.setTimeout(() => {
+          this.later(i * 0.09, () => {
             const a = this.rng.range(0, Math.PI * 2);
             this.projectiles.push({
               id: id(),
@@ -900,7 +1301,7 @@ export class Game {
               color: "#2ec4d6",
               pierce: 1,
             });
-          }, i * 90);
+          });
         }
         break;
       case "covenant":
@@ -920,7 +1321,7 @@ export class Game {
           e.x += (cx - e.x) * 0.7;
           e.y += (cy - e.y) * 0.7;
         }
-        window.setTimeout(() => this.nova(cx, cy, 90, dmg, "#a78bfa"), 200);
+        this.later(0.2, () => this.nova(cx, cy, 90, dmg, "#a78bfa"));
         break;
       }
       case "dawn":
@@ -935,6 +1336,10 @@ export class Game {
     const st = this.statsCache;
     let dmg = amount;
     let crit = !!opts?.crit || this.rng.chance(st.crit);
+    if (this.markedCrits > 0) {
+      crit = true;
+      this.markedCrits--;
+    }
     if (opts?.backstab) dmg *= 1.5;
     if (this.hero.id === "lyra" && e.marks >= 2) {
       crit = true;
@@ -943,6 +1348,11 @@ export class Game {
     if (e.hp / e.maxHp < 0.3 && this.blessings.some((b) => b.id === "executioner")) dmg *= 1.3;
     if (this.hp / this.maxHp < 0.3 && this.blessings.some((b) => b.id === "last_stand")) dmg *= 1.4;
     if (this.synergies.includes("glass_cannon") && e.hp / e.maxHp < 0.15) dmg = e.hp + 1;
+    if (st.execute > 0 && !ENEMIES[e.kind].isBoss && e.hp / e.maxHp <= st.execute) dmg = e.hp + 1;
+    if (e.chill > 0 && this.blessings.some((b) => b.id === "winter_heart")) dmg *= 1.15;
+    if (this.hp / this.maxHp < 0.5 && this.blessings.some((b) => b.id === "dusk_pact")) {
+      /* extra lifesteal applied below */
+    }
     if (crit) dmg *= st.critDmg;
     dmg *= 1 + Math.min(1, this.combo * 0.02);
     e.hp -= dmg;
@@ -952,12 +1362,19 @@ export class Game {
     this.stats.maxCombo = Math.max(this.stats.maxCombo, this.combo);
     this.stats.damage += dmg;
     this.energy = Math.min(100, this.energy + dmg * 0.045 + (crit ? 2 : 0.6));
-    if (st.lifesteal > 0) this.hp = Math.min(this.maxHp, this.hp + dmg * st.lifesteal);
-    if (st.ignite > 0 && this.rng.chance(st.ignite)) e.burn = Math.max(e.burn, 2.4);
+    let steal = st.lifesteal;
+    if (this.hp / this.maxHp < 0.5 && this.blessings.some((b) => b.id === "dusk_pact")) steal += 0.12;
+    if (steal > 0) this.hp = Math.min(this.maxHp, this.hp + dmg * steal);
+    if (st.ignite > 0 && this.rng.chance(st.ignite)) e.burn = Math.max(e.burn, this.blessings.some((b) => b.id === "ember_core") ? 3.4 : 2.4);
+    if (st.poison > 0) e.poison = Math.max(e.poison, 3);
+    if (st.frost > 0) e.chill = Math.max(e.chill, 1.1);
+    if (st.comboFinisher && this.combo > 0 && this.combo % 12 === 0) {
+      this.nova(e.x, e.y, 54, st.attack * 0.8, "#ece6dc");
+    }
     if (st.lightning) {
       let chained = 0;
       for (const o of this.enemies) {
-        if (!o.alive || o.id === e.id || chained > 2) continue;
+        if (!o.alive || o.id === e.id || chained > (this.blessings.some((b) => b.id === "storm_call") ? 4 : 2)) continue;
         if (Math.hypot(o.x - e.x, o.y - e.y) < 80) {
           o.hp -= dmg * 0.35;
           o.flash = 1;
@@ -984,10 +1401,14 @@ export class Game {
     this.stats.gold += g;
     this.pickups.push({ x: e.x, y: e.y, vx: this.rng.range(-40, 40), vy: this.rng.range(-30, -10), gold: g, life: 4 });
     if (this.statsCache.onKillHeal) this.hp = Math.min(this.maxHp, this.hp + this.maxHp * this.statsCache.onKillHeal);
-    const boom = (this as unknown as { nextKillBoom?: number }).nextKillBoom;
-    if (boom) {
-      this.nova(e.x, e.y, 70, boom, "#e11d48");
-      (this as unknown as { nextKillBoom?: number }).nextKillBoom = 0;
+    if (this.nextKillBoom) {
+      this.nova(e.x, e.y, 70, this.nextKillBoom, "#e11d48");
+      this.nextKillBoom = 0;
+    }
+    if (this.statsCache.hasteOnKill) this.buffs.push({ id: "killhaste", t: 1.5, move: 0.3 });
+    if (this.blessings.some((b) => b.id === "night_harvest")) this.energy = Math.min(100, this.energy + 6);
+    if (this.synergies.includes("syn_coins") || this.synergies.includes("magnet_king")) {
+      this.hp = Math.min(this.maxHp, this.hp + 2);
     }
     if (this.synergies.includes("blood_inferno")) {
       this.nova(e.x, e.y, 54, this.statsCache.attack * 0.6, "#e11d48");
@@ -1015,25 +1436,54 @@ export class Game {
 
   hurtPlayer(amount: number, srcX: number, srcY: number) {
     if (this.invuln > 0 || this.overlay === "defeat") return;
+    if (this.parrying > 0) {
+      this.float(this.px, this.py - 18, "PARRY", "#c9a227", true);
+      this.energy = Math.min(100, this.energy + 18);
+      this.invuln = 0.28;
+      this.stats.parries++;
+      bumpMission(this.meta, "parry", 1);
+      bumpAch(this.meta, "parrygod", 1);
+      this.buzz(18);
+      const e = this.nearestEnemy(80);
+      if (e) this.hurtEnemy(e, amount * (1.2 + this.statsCache.parryBonus * 4), { skill: true, crit: true });
+      return;
+    }
     if (this.hero.id === "nyx" && this.rng.chance(0.12)) {
       this.float(this.px, this.py - 18, "PHASE", "#7dd3e8", false);
       this.invuln = 0.2;
       return;
     }
-    const dmg = Math.max(1, amount - this.statsCache.defense * 0.35);
+    let incoming = Math.max(1, amount - this.statsCache.defense * 0.35);
+    for (const b of this.buffs) if (b.fragile) incoming *= 1 + b.fragile;
+    if (this.flameShield > 0) {
+      const e = this.nearestEnemy(50);
+      if (e) e.burn = Math.max(e.burn, 2);
+      incoming *= 0.7;
+    }
+    if (this.shield > 0) {
+      const soak = Math.min(this.shield, incoming);
+      this.shield -= soak;
+      incoming -= soak;
+      this.float(this.px, this.py - 12, "SHIELD", "#2ec4d6", false);
+      if (incoming <= 0) {
+        this.invuln = 0.2;
+        return;
+      }
+    }
     if (this.stillBlood && !this.usedStill) {
       this.usedStill = true;
       this.invuln = 0.8;
       this.float(this.px, this.py - 20, "STILL BLOOD", "#22d3ee", true);
       return;
     }
-    this.hp -= dmg;
+    this.hp -= incoming;
     this.flash = 1;
     this.invuln = 0.45;
     this.combo = 0;
     this.addTrauma(0.55);
     Sfx.hurt();
-    this.float(this.px, this.py - 18, `-${Math.round(dmg)}`, "#e11d48", false);
+    this.buzz(25);
+    this.float(this.px, this.py - 18, `-${Math.round(incoming)}`, "#e11d48", false);
     const dx = this.px - srcX;
     const dy = this.py - srcY;
     const d = Math.hypot(dx, dy) || 1;
@@ -1041,9 +1491,16 @@ export class Game {
     this.py += (dy / d) * 18;
     if (this.statsCache.thorns > 0) {
       const e = this.nearestEnemy(60);
-      if (e) this.hurtEnemy(e, dmg * this.statsCache.thorns, { skill: true });
+      if (e) this.hurtEnemy(e, incoming * this.statsCache.thorns, { skill: true });
     }
     if (this.hp <= 0) {
+      if (this.statsCache.secondWind && !this.usedSecond) {
+        this.usedSecond = true;
+        this.hp = 1;
+        this.invuln = 1.4;
+        this.float(this.px, this.py - 24, "SECOND BREATH", "#22d3ee", true);
+        return;
+      }
       const neck = this.meta.equipped.necklace;
       const item = this.meta.inventory.find((i) => i.uid === neck);
       if (!this.usedCheatDeath && item?.defId === "neck_abyss") {
@@ -1067,6 +1524,12 @@ export class Game {
       if (e.burn > 0) {
         e.burn -= dt;
         e.hp -= this.statsCache.attack * 0.12 * dt;
+        if (e.hp <= 0) this.killEnemy(e);
+      }
+      if (e.poison > 0) {
+        e.poison -= dt;
+        const rate = this.blessings.some((b) => b.id === "viper_coil") ? 0.45 : 0.22;
+        e.hp -= this.statsCache.attack * rate * dt;
         if (e.hp <= 0) this.killEnemy(e);
       }
       if (e.chill > 0) e.chill -= dt;
@@ -1196,7 +1659,14 @@ export class Game {
           if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r) {
             this.hurtEnemy(e, p.dmg, { skill: false });
             p.pierce--;
-            if (p.pierce < 0) p.life = 0;
+          if (p.pierce < 0) {
+            if (this.statsCache.ricochet && p.life > 0.2) {
+              p.vx *= -0.7;
+              p.vy *= -0.7;
+              p.pierce = 0;
+              p.life *= 0.5;
+            } else p.life = 0;
+          }
           }
         }
       } else if (this.invuln <= 0 && Math.hypot(this.px - p.x, this.py - p.y) < 12 + p.r) {
@@ -1262,9 +1732,10 @@ export class Game {
       const dx = this.px - p.x;
       const dy = this.py - p.y;
       const d = Math.hypot(dx, dy);
-      if (d < 90) {
-        p.vx += (dx / (d || 1)) * 280 * dt;
-        p.vy += (dy / (d || 1)) * 280 * dt;
+      const pull = this.statsCache.magnet ? 160 : 90;
+      if (d < pull) {
+        p.vx += (dx / (d || 1)) * (this.statsCache.magnet ? 420 : 280) * dt;
+        p.vy += (dy / (d || 1)) * (this.statsCache.magnet ? 420 : 280) * dt;
       }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -1455,6 +1926,7 @@ export class Game {
     const b = rollBlessings(this.rng, this.blessings, 2);
     this.shop = [
       { kind: "heal", cost: 40, title: "Bandage", desc: "Restore 40% HP." },
+      { kind: "heal", cost: 70, title: "Elixir", desc: "Restore 70% HP." },
       ...b.map((x) => ({
         kind: "blessing" as const,
         blessingId: x.id,
@@ -1469,7 +1941,7 @@ export class Game {
     const o = this.shop[i];
     if (!o || this.gold < o.cost) return;
     this.gold -= o.cost;
-    if (o.kind === "heal") this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.4);
+    if (o.kind === "heal") this.hp = Math.min(this.maxHp, this.hp + this.maxHp * (o.title === "Elixir" ? 0.7 : 0.4));
     if (o.kind === "blessing" && o.blessingId) {
       const b = BLESSING_BY_ID[o.blessingId];
       if (b) {
@@ -1602,10 +2074,90 @@ export class Game {
     this.meta.tutorialDone = true;
     if (this.overlay === "tutorial") this.overlay = "none";
   }
+
+  later(t: number, fn: () => void) {
+    this.pending.push({ t, fn });
+  }
+
+  tickPending(dt: number) {
+    for (const p of this.pending) p.t -= dt;
+    const due = this.pending.filter((p) => p.t <= 0);
+    this.pending = this.pending.filter((p) => p.t > 0);
+    for (const p of due) {
+      try {
+        p.fn();
+      } catch {
+        /* ignored */
+      }
+    }
+  }
+
+  tickBuffs(dt: number) {
+    for (const b of this.buffs) b.t -= dt;
+    this.buffs = this.buffs.filter((b) => b.t > 0);
+  }
+
+  doParry() {
+    const extra = this.statsCache.parryBonus;
+    this.parrying = 0.22 + extra;
+    this.parryCd = Math.max(0.9, 1.55 - extra * 2);
+    this.invuln = Math.max(this.invuln, this.parrying);
+    this.float(this.px, this.py - 16, "GUARD", "#c9a227", false);
+  }
+
+  rollTechniques() {
+    const pool = [...TECHNIQUES];
+    this.techniqueChoices = [];
+    for (let i = 0; i < 3 && pool.length; i++) {
+      const t = this.rng.pick(pool);
+      this.techniqueChoices.push(t);
+      pool.splice(pool.indexOf(t), 1);
+    }
+  }
+
+  pickTechnique(idStr: string) {
+    const t = TECHNIQUE_BY_ID[idStr] ?? this.techniqueChoices.find((x) => x.id === idStr);
+    if (!t) return;
+    this.technique = t;
+    if (!this.meta.discoveredTechniques) this.meta.discoveredTechniques = [];
+    if (!this.meta.discoveredTechniques.includes(t.id)) this.meta.discoveredTechniques.push(t.id);
+    bumpAch(this.meta, "techs", this.meta.discoveredTechniques.length);
+    this.overlay = "none";
+    this.float(this.px, this.py - 28, t.name.toUpperCase(), t.color, true);
+  }
+
+  rerollBlessings() {
+    if (this.gold < 25 || this.overlay !== "blessing") return false;
+    this.gold -= 25;
+    this.blessingChoices = rollBlessings(this.rng, this.blessings, 3);
+    return true;
+  }
+
+  tryPickOverlay(i: number) {
+    if (this.overlay === "blessing" && this.blessingChoices[i]) this.pickBlessing(this.blessingChoices[i]!.id);
+    else if (this.overlay === "technique" && this.techniqueChoices[i]) this.pickTechnique(this.techniqueChoices[i]!.id);
+    else if (this.overlay === "event" && this.event?.choices[i]) this.pickEvent(i);
+    else if (this.overlay === "chest" && this.chestRewards[i]) this.pickChest(i);
+    else if (this.overlay === "map") {
+      const next = this.graph[this.floor + 1] ?? [];
+      const cur = this.graph[this.floor]?.[this.node];
+      const open = next.filter((n) => cur?.next.includes(n.index));
+      if (open[i]) this.pickNode(open[i]!.index);
+    }
+  }
+
+  buzz(ms: number) {
+    if (!this.haptics) return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      /* no haptic */
+    }
+  }
 }
 
 function emptyStats(): RunStats {
-  return { kills: 0, bosses: 0, damage: 0, gold: 0, gems: 0, blessings: 0, maxCombo: 0, time: 0, score: 0, rooms: 0, noHitBoss: false };
+  return { kills: 0, bosses: 0, damage: 0, gold: 0, gems: 0, blessings: 0, maxCombo: 0, time: 0, score: 0, rooms: 0, noHitBoss: false, parries: 0 };
 }
 
 function combatRoom(t: RoomType) {

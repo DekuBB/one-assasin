@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lowFx: false,
   language: "en",
   uiScale: 1,
+  showTouch: false,
 };
 
 function today() {
@@ -46,6 +47,7 @@ export function defaultSave(): MetaSave {
     equipped,
     legacy: {},
     discoveredBlessings: [],
+    discoveredTechniques: [],
     achievements: {},
     missions: {},
     bestScore: 0,
@@ -84,6 +86,7 @@ function migrate(raw: Partial<MetaSave>): MetaSave {
     unlockedHeroes: raw.unlockedHeroes?.length ? raw.unlockedHeroes : base.unlockedHeroes,
     legacy: { ...base.legacy, ...(raw.legacy ?? {}) },
     discoveredBlessings: raw.discoveredBlessings ?? [],
+    discoveredTechniques: raw.discoveredTechniques ?? [],
     achievements: raw.achievements ?? {},
     missions: raw.missions ?? {},
     version: SAVE_VERSION,

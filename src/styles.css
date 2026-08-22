@@ -48,6 +48,7 @@
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    overscroll-behavior: none;
   }
 
   button:not(:disabled),
@@ -88,6 +89,13 @@
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+.safe-pad {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .stage-vignette {

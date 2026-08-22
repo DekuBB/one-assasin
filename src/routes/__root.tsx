@@ -21,6 +21,7 @@ export const Route = createRootRoute({
         content: "ONE ASSASIN — One life. One blade. One chance. A pixel-art action roguelike.",
       },
       { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "mobile-web-app-capable", content: "yes" },
     ],
     links: [

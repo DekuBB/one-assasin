@@ -31,6 +31,12 @@ export const HEROES: HeroDef[] = [
       desc: "A wide crescent of void energy that cuts through a line of enemies.",
       cooldown: 7.5,
     },
+    skill3: {
+      id: "afterimage",
+      name: "Afterimage",
+      desc: "Leave a lasting phantom that hunts for 3s.",
+      cooldown: 8.5,
+    },
     ult: {
       id: "phantom",
       name: "Phantom Judgement",
@@ -71,6 +77,12 @@ export const HEROES: HeroDef[] = [
       name: "Umbral Pierce",
       desc: "A piercing shot that chains to a second enemy.",
       cooldown: 8,
+    },
+    skill3: {
+      id: "trap_shot",
+      name: "Trap Shot",
+      desc: "Plant a snare arrow. Explodes when a foe steps near.",
+      cooldown: 7.4,
     },
     ult: {
       id: "eclipse",
@@ -113,6 +125,12 @@ export const HEROES: HeroDef[] = [
       desc: "The next kill detonates, dealing 180% attack in a radius.",
       cooldown: 9,
     },
+    skill3: {
+      id: "blood_armor",
+      name: "Blood Armor",
+      desc: "Convert 18% current HP into a 2.5x shield.",
+      cooldown: 12,
+    },
     ult: {
       id: "covenant",
       name: "Crimson Covenant",
@@ -153,6 +171,12 @@ export const HEROES: HeroDef[] = [
       name: "Iron Palm",
       desc: "Stun a cone of enemies and shatter their guard.",
       cooldown: 8.5,
+    },
+    skill3: {
+      id: "sweep",
+      name: "Sweep Kick",
+      desc: "360° knockdown. Foes are chilled and launched.",
+      cooldown: 7.2,
     },
     ult: {
       id: "kata",
@@ -195,6 +219,12 @@ export const HEROES: HeroDef[] = [
       desc: "Three orbiting orbs that strike nearby foes.",
       cooldown: 10,
     },
+    skill3: {
+      id: "blink",
+      name: "Rift Blink",
+      desc: "Teleport 90px. Drop a collapsing rift behind you.",
+      cooldown: 6.6,
+    },
     ult: {
       id: "collapse",
       name: "Event Collapse",
@@ -235,6 +265,12 @@ export const HEROES: HeroDef[] = [
       name: "Solar Burst",
       desc: "Knockback nova. Leaves a burning ring.",
       cooldown: 9,
+    },
+    skill3: {
+      id: "flame_shield",
+      name: "Flame Shield",
+      desc: "A burning aegis. Attackers ignite. Lasts 4s.",
+      cooldown: 11,
     },
     ult: {
       id: "dawn",

@@ -56,7 +56,7 @@ export const BLESSINGS: BlessingDef[] = [
   { id: "thorn_mail", name: "Thorn Mail", desc: "Return 30% of melee damage.", rarity: "uncommon", thorns: 0.3 },
   { id: "moon_fang", name: "Moon Fang", desc: "+5 attack, +8% crit.", rarity: "uncommon", attack: 5, crit: 0.08 },
   { id: "storm_greaves", name: "Storm Greaves", desc: "+12% move, dash CD -10%.", rarity: "rare", move: 0.12, dashCd: 0.1 },
-  { id: "blood_well", name: "Blood Well", desc: "Heal 3 HP per second in combat.", rarity: "rare", heal: 0 },
+  { id: "blood_well", name: "Blood Well", desc: "Heal 3 HP per second in combat.", rarity: "rare", bloodWell: 3 },
   { id: "executioner", name: "Executioner", desc: "+30% damage to enemies below 30% HP.", rarity: "epic", attackPct: 0.08 },
   { id: "last_stand", name: "Last Stand", desc: "+40% damage below 30% HP.", rarity: "epic", attackPct: 0.05 },
   { id: "void_skin", name: "Void Skin", desc: "+8 defense, +20 HP.", rarity: "rare", defense: 8, hp: 20 },
@@ -68,6 +68,30 @@ export const BLESSINGS: BlessingDef[] = [
   { id: "forbidden_tempo", name: "Forbidden Tempo", desc: "+25% attack and move speed.", rarity: "mythic", atkSpd: 0.25, move: 0.25 },
   { id: "world_cutter", name: "World Cutter", desc: "+35% skill damage, +15 attack.", rarity: "mythic", skillDmg: 0.35, attack: 15 },
   { id: "still_blood", name: "Still Blood", desc: "First lethal hit each room is ignored.", rarity: "forbidden", hp: 12 },
+  { id: "venom_edge", name: "Venom Edge", desc: "Attacks apply poison that ticks for 3s.", rarity: "uncommon", poison: 0.35 },
+  { id: "rime_kiss", name: "Rime Kiss", desc: "Hits chill enemies, slowing them 40%.", rarity: "uncommon", frost: 1.4 },
+  { id: "reaper_cut", name: "Reaper Cut", desc: "Execute non-bosses below 12% HP.", rarity: "epic", execute: 0.12 },
+  { id: "dash_fang", name: "Dash Fang", desc: "Dashing through foes deals 80% attack.", rarity: "rare", dashDmg: 0.8 },
+  { id: "bouncing_steel", name: "Bouncing Steel", desc: "Projectiles ricochet once.", rarity: "rare", ricochet: true },
+  { id: "gold_magnet", name: "Gold Magnet", desc: "Pickups fly to you from farther away.", rarity: "uncommon", magnet: true, goldPct: 0.1 },
+  { id: "second_breath", name: "Second Breath", desc: "Once per run, survive lethal damage at 1 HP.", rarity: "legendary", secondWind: true, hp: 10 },
+  { id: "finishing_form", name: "Finishing Form", desc: "At 12 combo, the next hit is a shockwave.", rarity: "epic", comboFinisher: true, atkSpd: 0.06 },
+  { id: "iron_guard", name: "Iron Guard", desc: "Parry window +80ms, reflect +20% damage.", rarity: "rare", parryWindow: 0.08, defense: 4 },
+  { id: "crimson_well", name: "Crimson Well", desc: "Regenerate 4 HP per second in combat.", rarity: "rare", bloodWell: 4 },
+  { id: "kill_haste", name: "Kill Haste", desc: "Kills grant +30% move for 1.5s.", rarity: "uncommon", hasteOnKill: true, move: 0.05 },
+  { id: "dash_aegis", name: "Dash Aegis", desc: "Dashing grants a brief 12 HP shield.", rarity: "epic", shieldOnDash: true },
+  { id: "deep_pockets", name: "Deep Pockets", desc: "+55% gold from all sources.", rarity: "rare", goldPct: 0.55 },
+  { id: "viper_coil", name: "Viper Coil", desc: "Poison ticks twice as often.", rarity: "epic", poison: 0.2, atkSpd: 0.05 },
+  { id: "winter_heart", name: "Winter Heart", desc: "Chilled foes take +15% damage.", rarity: "epic", frost: 0.6, attackPct: 0.08 },
+  { id: "storm_call", name: "Storm Call", desc: "Lightning chains to a fourth target.", rarity: "legendary", lightning: true, skillDmg: 0.12 },
+  { id: "hollow_step", name: "Hollow Step", desc: "After dash, +20% move for 1s.", rarity: "uncommon", move: 0.08, dashCd: 0.08 },
+  { id: "butcher_tempo", name: "Butcher Tempo", desc: "+18% attack speed, +6 attack.", rarity: "rare", atkSpd: 0.18, attack: 6 },
+  { id: "saint_of_knives", name: "Saint of Knives", desc: "Basic attacks fire a bonus shiv at 25%.", rarity: "legendary", attackPct: 0.1 },
+  { id: "dusk_pact", name: "Dusk Pact", desc: "+12% lifesteal while below 50% HP.", rarity: "epic", lifesteal: 0.06, hp: 16 },
+  { id: "ember_core", name: "Ember Core", desc: "Ignite chance +20%, burns last longer.", rarity: "rare", ignite: 0.2 },
+  { id: "silent_oath", name: "Silent Oath", desc: "+10 defense, -8% move. Stand your ground.", rarity: "uncommon", defense: 10, move: -0.08 },
+  { id: "twin_fang", name: "Twin Fang", desc: "Every other attack strikes twice.", rarity: "legendary", attackPct: 0.15, atkSpd: 0.04 },
+  { id: "night_harvest", name: "Night Harvest", desc: "Kills restore 6 energy.", rarity: "rare", onKillHeal: 0.02 },
 ];
 
 export const BLESSING_BY_ID: Record<string, BlessingDef> = Object.fromEntries(
@@ -190,6 +214,49 @@ export const SYNERGIES: SynergyDef[] = [
       hp: 30,
     },
   },
+  {
+    id: "venom_winter",
+    name: "Venom Winter",
+    desc: "Poisoned and chilled foes shatter.",
+    requires: ["venom_edge", "rime_kiss"],
+    grant: {
+      id: "syn_winter",
+      name: "Venom Winter",
+      desc: "Chilled poisoned foes take ticking frostbite.",
+      rarity: "forbidden",
+      poison: 0.2,
+      frost: 0.8,
+      attack: 8,
+    },
+  },
+  {
+    id: "reaper_dash",
+    name: "Reaper's Stride",
+    desc: "Dash Fang + Reaper Cut: dashes execute.",
+    requires: ["dash_fang", "reaper_cut"],
+    grant: {
+      id: "syn_stride",
+      name: "Reaper's Stride",
+      desc: "Dash damage executes below 20% HP.",
+      rarity: "forbidden",
+      dashDmg: 0.4,
+      execute: 0.08,
+    },
+  },
+  {
+    id: "magnet_king",
+    name: "King of Coins",
+    desc: "Gold Magnet + Gilded Eye: overflowing plunder.",
+    requires: ["gold_magnet", "gilded_eye"],
+    grant: {
+      id: "syn_coins",
+      name: "King of Coins",
+      desc: "+25% gold, pickups heal 2 HP.",
+      rarity: "forbidden",
+      goldPct: 0.25,
+      magnet: true,
+    },
+  },
 ];
 
 export const EQUIPMENT: EquipDef[] = [
@@ -215,6 +282,12 @@ export const EQUIPMENT: EquipDef[] = [
   { id: "neck_abyss", name: "Heart of the Abyss", slot: "necklace", rarity: "legendary", hp: 120, attack: 30, perk: "Cheat death once" },
   { id: "relic_coin", name: "Cursed Doubloon", slot: "relic", rarity: "rare", attack: 15, perk: "+35% gold" },
   { id: "relic_chrono", name: "Chrono Hourglass", slot: "relic", rarity: "mythic", attack: 40, defense: 20, perk: "-25% skill CD" },
+  { id: "wep_twin_fang", name: "Twin Fang", slot: "weapon", rarity: "epic", attack: 58, atkSpd: 0.2, perk: "Every 3rd hit doubles" },
+  { id: "wep_frostbite", name: "Frostbite Needle", slot: "weapon", rarity: "rare", attack: 36, crit: 0.08, perk: "Chills on hit" },
+  { id: "glove_parry", name: "Parry Wraps", slot: "gloves", rarity: "rare", defense: 10, atkSpd: 0.08, perk: "Wider parry window" },
+  { id: "boot_hunter", name: "Hunter's Pace", slot: "boots", rarity: "uncommon", move: 0.16, defense: 6, perk: "Kills haste" },
+  { id: "ring_storm", name: "Storm Signet", slot: "ring", rarity: "legendary", attack: 32, crit: 0.12, perk: "Lightning on crit" },
+  { id: "relic_aegis", name: "Aegis Shard", slot: "relic", rarity: "epic", defense: 18, hp: 40, perk: "Dash grants shield" },
 ];
 
 export const EQUIP_BY_ID: Record<string, EquipDef> = Object.fromEntries(
@@ -363,6 +436,36 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     color: "#e07a3a",
     isBoss: true,
   },
+  wraith: {
+    kind: "wraith",
+    name: "Ash Wraith",
+    hp: 70,
+    attack: 15,
+    speed: 165,
+    range: 48,
+    cooldown: 1.2,
+    telegraph: 0.28,
+    radius: 10,
+    xp: 12,
+    gold: 9,
+    color: "#7dd3e8",
+    isFlying: true,
+  },
+  golem: {
+    kind: "golem",
+    name: "Rune Golem",
+    hp: 420,
+    attack: 26,
+    speed: 48,
+    range: 50,
+    cooldown: 2.1,
+    telegraph: 0.85,
+    radius: 18,
+    xp: 40,
+    gold: 32,
+    color: "#6a7388",
+    isElite: true,
+  },
 };
 
 export const EVENTS: EventDef[] = [
@@ -478,6 +581,8 @@ export const MISSIONS = [
   { id: "blessings", title: "Favor of the Dark", desc: "Collect 5 blessings.", target: 5, gold: 220, gems: 12 },
   { id: "dash", title: "Ghost Dancer", desc: "Perform 25 dashes.", target: 25, gold: 180, gems: 8 },
   { id: "run", title: "Another Descent", desc: "Complete or die in 1 run.", target: 1, gold: 200, gems: 10 },
+  { id: "parry", title: "Perfect Guard", desc: "Parry 8 attacks.", target: 8, gold: 240, gems: 12 },
+  { id: "tech", title: "Hidden Form", desc: "Use a technique 10 times.", target: 10, gold: 200, gems: 10 },
 ];
 
 export const ACHIEVEMENTS = [
@@ -493,6 +598,8 @@ export const ACHIEVEMENTS = [
   { id: "kills", title: "Reaper", desc: "Defeat 500 enemies.", target: 500, gems: 30 },
   { id: "speed", title: "Lightning Stride", desc: "Clear a combat room in 20s.", target: 1, gems: 20 },
   { id: "widow", title: "Widowbreaker", desc: "Defeat The Iron Widow.", target: 1, gems: 50 },
+  { id: "parrygod", title: "Unbroken", desc: "Parry 40 attacks total.", target: 40, gems: 25 },
+  { id: "techs", title: "Hundred Forms", desc: "Discover 12 techniques.", target: 12, gems: 30 },
 ];
 
 export const BIOMES = {
