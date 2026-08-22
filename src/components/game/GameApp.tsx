@@ -25,7 +25,15 @@ export function GameApp() {
   const save = useMeta((s) => s.save);
   const applyRun = useMeta((s) => s.applyRun);
   const [game, setGame] = useState<Game | null>(null);
-  const [device, setDevice] = useState<DeviceInfo>(() => readDevice());
+  const [device, setDevice] = useState<DeviceInfo>({
+    kind: "phone",
+    coarse: false,
+    touch: false,
+    width: 390,
+    height: 844,
+    portrait: true,
+  });
+  const [ready, setReady] = useState(false);
   const applied = useRef(false);
 
   useEffect(() => {
@@ -41,6 +49,8 @@ export function GameApp() {
     window.addEventListener("pointerdown", boot, { once: true });
     window.addEventListener("keydown", boot, { once: true });
     const onResize = () => setDevice(readDevice());
+    onResize();
+    setReady(true);
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     return () => {
@@ -75,7 +85,7 @@ export function GameApp() {
   };
 
   const inRun = screen === "run" && game;
-  const wide = device.kind === "desktop";
+  const wide = ready && device.kind === "desktop";
   const scale = save.settings.uiScale || 1;
 
   return (

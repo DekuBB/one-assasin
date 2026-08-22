@@ -34,7 +34,7 @@ export function RunView({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [overlay, setOverlay] = useState<RunOverlay>(game.overlay);
   const [tick, setTick] = useState(0);
-  const showTouch = shouldShowTouch(game.meta.settings.showTouch) || (device.coarse && overlay === "none");
+  const showTouch = shouldShowTouch(game.meta.settings.showTouch) || device.kind === "phone";
 
   useEffect(() => {
     const canvas = canvasRef.current;

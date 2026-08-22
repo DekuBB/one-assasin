@@ -312,7 +312,7 @@ export class Game {
     this.dashMax = this.statsCache.dashCharges;
     this.enterNode();
     this.rollTechniques();
-    this.overlay = this.tutorial ? "none" : "technique";
+    this.overlay = "technique";
     if (this.tutorial) this.tutorialStep = 1;
   }
 

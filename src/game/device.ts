@@ -25,5 +25,5 @@ export function readDevice(): DeviceInfo {
 export function shouldShowTouch(force?: boolean): boolean {
   if (force) return true;
   const d = readDevice();
-  return d.coarse || (d.touch && d.kind !== "desktop");
+  return d.coarse || d.kind === "phone" || (d.touch && d.kind !== "desktop");
 }
